@@ -1,7 +1,11 @@
 const { declare } = require('@babel/helper-plugin-utils');
+const fs = require('fs');
 const fse = require('fs-extra');
 const path = require('path');
+const { exit } = require('process');
 const generate = require('@babel/generator').default;
+const child_process = require('child_process');
+const shell = require('shelljs');
 
 let intlIndex = 0;
 function nextIntlKey() {
@@ -14,6 +18,21 @@ const autoTrackPlugin = declare((api, options, dirname) => {
 
     if (!options.outputDir) {
         throw new Error('outputDir in empty');
+    }else{
+        console.log('default outputDir:', options.outputDir);
+    }
+    console.log('options:', options);
+    if(options.excJsPath){
+        const excJsRealPath = path.join(__dirname, '..', '..', options.excJsPath);
+        console.log('currentDir:', excJsRealPath);
+        // 只能执行纯 js 代码
+        // eval(fs.readFileSync(excJsRealPath, {
+        //     encoding: 'utf-8'
+        // }));
+
+        // child_process.execFileSync(excJsRealPath);
+
+        // shell.exec(`node ${excJsRealPath}`);
     }
 
     function getReplaceExpression(path, value, intlUid) {
@@ -35,6 +54,7 @@ const autoTrackPlugin = declare((api, options, dirname) => {
 
     return {
         pre(file) {
+            // console.log('prepare file:', file);
             file.set('allText', []);
         },
         visitor: {
@@ -47,12 +67,48 @@ const autoTrackPlugin = declare((api, options, dirname) => {
                             if(source === 'intl') {
                                 imported = true;
                             }
+                            options.replaceImports?.forEach((replaceImport, index) => {
+                                if(source === replaceImport.module){
+                                    let delIndex = -1;
+                                    p.node.specifiers.forEach((value, index) => {
+                                        if(replaceImport.component === value.imported.name){
+                                            delIndex = index;
+                                            return;
+                                        }
+                                    });
+                                    if(delIndex > -1){
+                                        p.node.specifiers.splice(delIndex, 1);
+                                        let insertIndex = -1;
+                                        path.node.body.forEach((value, index) => {
+                                            if(value.type === 'ImportDeclaration' && value.source.value === source){
+                                                insertIndex = index + 1;
+                                                return;
+                                            }
+                                        });
+                                        if(insertIndex > -1){
+                                            path.node.body.splice(insertIndex, 0, api.template.ast(replaceImport.replaceStr));
+                                        }
+                                    }
+                                }
+                            });
                         }
                     });
                     if (!imported) {
                         const uid = path.scope.generateUid('intl');
+                        // console.log('generateUid:', uid);
                         const importAst = api.template.ast(`import ${uid} from 'intl'`);
-                        path.node.body.unshift(importAst);
+                        // console.log('importAst:', importAst);
+                        // console.log(path.node.body);
+                        // path.node.body.push(importAst);
+                        // path.node.body.unshift(importAst);
+                        let lastImportIndex = 0;
+                        path.node.body.forEach((value, index) => {
+                            if(value.type !== 'ImportDeclaration'){
+                                lastImportIndex = index;
+                                return;
+                            }
+                        });
+                        path.node.body.splice(lastImportIndex, 0, importAst);
                         state.intlUid = uid;
                     }
 

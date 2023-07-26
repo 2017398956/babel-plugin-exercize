@@ -3,7 +3,6 @@ const importModule = require('@babel/helper-module-imports');
 
 const autoTrackPlugin = declare((api, options, dirname) => {
     api.assertVersion(7);
-
     return {
         visitor: {
             Program: {

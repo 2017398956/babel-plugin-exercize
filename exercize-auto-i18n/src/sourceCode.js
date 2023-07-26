@@ -1,4 +1,5 @@
 import intl from 'intl2';
+import {a, b} from 'test-import';
 /**
  * App
  */
